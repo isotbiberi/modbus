@@ -14,7 +14,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <bitset>
-
+#include <thread>
 
 //static const char* return_from_alarm_register(int alarm_code);
 #define BUG_REPORT(_cond, _format, _args ...) \
@@ -27,18 +27,21 @@
         BUG_REPORT(_cond, _format, ## __args);    \
     }                                             \
 };
-#define INPUTREGISTER1 0x40000//40001 aslinda6
+
+
+#define INPUTREGISTER1 0x40000//40001 aslinda
 #define INPUTREGISTER2 0x40001
 #define OUTPUTREGISTER1 0x40002
-#define RIGHTDOMESLOPE 0x40020
-#define LEFTDOMESLOPE 0x40021
+#define RIGHTDOMESLOPE 0x40008
+#define LEFTDOMESLOPE 0x40009
 #define HYDROLICTEMPERATURE 0x40022
 #define DOMETEMPERATURE 0x40023
-#define RIGHTDOMEPOSITIONCOMMAND 0x40010
-#define LEFTDOMEPOSITIONCOMMAND 0x40011
+#define RIGHTDOMEPOSITIONCOMMAND 0x40006
+#define LEFTDOMEPOSITIONCOMMAND 0x40007
 
 
 #define CONTROLWORD1 0x40003
+
 #define EMERGENCY_STOP 0
 #define RESET_PLC 1
 #define RUN_HYDROLIC 2
@@ -49,14 +52,15 @@
 #define DOME_LEFT_POSITION 7
 #define DOME_RIGHT_POSITION 8
 
-#define STATUSWORD1 0x40005
+#define STATUSWORD1 0x40004
 #define CLOSING_SHUTTER_LEFT 0
 #define CLOSING_SHUTTER_WRIGHT 1
 #define OPENING_DOME_LEFT 2
 #define OPENING_DOME_WRIGHT 3
 #define ALARM 4
+#define HEARTBIT 5
 
-#define ALARMWORD1 0x40006
+#define ALARMWORD1 0x40005
 #define PHASE_PROTECTION_ALARM 0
 #define HYDROLIC_MOTOR_ERROR 1
 #define HYDROLIC_DIRT_ERROR 2
@@ -71,6 +75,8 @@
 #define RIGHT_SHUTTER_SLOPE_SENSOR_ALARM 11
 #define LEFT_SHUTTER_SLOPE_SENSOR_ALARM 12
 using namespace std;
+
+
 
 
 static const char* return_from_alarm_register(int alarm_code)
@@ -108,11 +114,21 @@ static const char* return_from_status_register(int status_code)
 
 	  switch (status_code)
 	        {
-	        case CLOSING_SHUTTER_LEFT:         status = "Left shutter is closing";           break;
-	        case CLOSING_SHUTTER_WRIGHT:         status = "Right shutter is closing";                      break;
-	        case OPENING_DOME_LEFT:         status = "Left shutter is opening";                      break;
-	        case OPENING_DOME_WRIGHT:         status = "Right shutter is opening";                  break;
-	        case ALARM:         status = "ALARM";                  break;
+	case CLOSING_SHUTTER_LEFT:
+		status = "Left shutter is closing";
+		break;
+	case CLOSING_SHUTTER_WRIGHT:
+		status = "Right shutter is closing";
+		break;
+	case OPENING_DOME_LEFT:
+		status = "Left shutter is opening";
+		break;
+	case OPENING_DOME_WRIGHT:
+		status = "Right shutter is opening";
+		break;
+	case ALARM:
+		status = "ALARM";
+		break;
 
 	        default:
 	                status = "Unknown state"; break;
@@ -126,119 +142,173 @@ static const char* return_from_status_register(int status_code)
 
 void checkAlarms(uint16_t * tab_rp_registers)
 {
-    std::bitset<16> IntBits=tab_rp_registers[0];
+	std::bitset<16> IntBits = tab_rp_registers[0];
 	bool is_set;
-	for(int i =0;i<16;i++)
-	{
+	for (int i = 0; i < 16; i++) {
 		is_set = IntBits.test(i);
-        if(is_set)
-        	std::cout<<return_from_alarm_register(i)<<std::endl;
+		if (is_set)
+			std::cout << return_from_alarm_register(i) << std::endl;
 	}
 }
 
 void checkStates(uint16_t * tab_rp_registers)
 {
-    std::bitset<16> IntBits=tab_rp_registers[0];
+	std::bitset<16> IntBits = tab_rp_registers[0];
 	bool is_set;
-	for(int i =0;i<16;i++)
-	{
+	for (int i = 0; i < 16; i++) {
 		is_set = IntBits.test(i);
-        if(is_set)
-        	std::cout<<return_from_status_register(i)<<std::endl;
+		if (is_set)
+			std::cout << return_from_status_register(i) << std::endl;
 	}
 }
 
 
 int openLeftShutter(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-	                         std::bitset<16> bitSet = tab_rp_registers[0];
-	                         bitSet.set(OPEN_SHUTTER_LEFT);
-							 int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
-							 printf("Open Left Shutter bit is Set \n");
-							 ASSERT_TRUE(rc == 1, "");
-                             return rc;
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.set(OPEN_SHUTTER_LEFT);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("Open Left Shutter bit is Set \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 }
+
+int goLeftShutter(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
+{
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.set(DOME_LEFT_POSITION);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("Open Left Shutter bit is Set \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
+}
+
 
 int closeLeftShutter(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-						 std::bitset<16> bitSet = tab_rp_registers[0];
-					     bitSet.set(CLOSE_SHUTTER_LEFT);
-						 int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
-						 printf("Close Left shutter bit is set\n ");
-						 ASSERT_TRUE(rc == 1, "");
-                         return rc;
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.set(CLOSE_SHUTTER_LEFT);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("Close Left shutter bit is set\n ");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 }
 
 
 int openRightShutter(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-					 std::bitset<16> bitSet = tab_rp_registers[0];
-				     bitSet.set(OPEN_SHUTTER_RIGHT);
-					 int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
-					 printf("Open right shutter bit is set\n: ");
-					 ASSERT_TRUE(rc == 1, "");
-                     return rc;
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.set(OPEN_SHUTTER_RIGHT);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("Open right shutter bit is set\n: ");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
+}
+
+int goRightShutter(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
+{
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.set(DOME_RIGHT_POSITION);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("Open Left Shutter bit is Set \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 }
 
 int closeRightShutter(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-				 std::bitset<16> bitSet = tab_rp_registers[0];
-			     bitSet.set(CLOSE_SHUTTER_RIGHT);
-				 int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
-				 printf("Close right shutter bit is set: \n");
-				 ASSERT_TRUE(rc == 1, "");
-				 return rc;
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.set(CLOSE_SHUTTER_RIGHT);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("Close right shutter bit is set: \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 }
 
 
 int  emergencyStop(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-	 	 	 std::bitset<16> bitSet = tab_rp_registers[0];
-		     bitSet.set(EMERGENCY_STOP);
-			 int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
-			 printf("Emergency stop bit is set: \n");
-			 ASSERT_TRUE(rc == 1, "");
-			 return rc;
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.set(EMERGENCY_STOP);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("Emergency stop bit is set: \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 }
 
 int resetButton(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-	 	 	  std::bitset<16> bitSet = tab_rp_registers[0];
-			  bitSet.set(RESET_PLC);
-			  int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
-			  printf("Reset button bit is set: \n");
-			  ASSERT_TRUE(rc == 1, "");
-			  return rc;
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.set(RESET_PLC);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("Reset button bit is set: \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 }
 
 int runHydrolic(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-	      std::bitset<16> bitSet = tab_rp_registers[0];
-		  bitSet.set(RUN_HYDROLIC);
-		  int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
-		  printf("run Hydrolic bit is set: \n");
-		  ASSERT_TRUE(rc == 1, "");
-		  return rc;
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.set(RUN_HYDROLIC);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("run Hydrolic bit is set: \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 }
+
+int setHearBeat2(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
+{
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.set(9);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("reset heartbeat bit is reset: \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
+}
+
+int resetHearBeat2(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
+{
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.reset(9);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("reset heartbeat bit is reset: \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
+}
+
+
+
+int resetHeartBit(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
+{
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	std::cout<<bitSet.test(HEARTBIT)<<std::endl;
+	bitSet.reset(HEARTBIT);
+	std::cout<<bitSet.test(HEARTBIT)<<std::endl;
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("heartBeat reset \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
+
+}
+
 int stopHydrolic(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-	      std::bitset<16> bitSet = tab_rp_registers[0];
-		  bitSet.reset(RUN_HYDROLIC);
-		  int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
-		  printf("run Hydrolic bit is reset: \n");
-		  ASSERT_TRUE(rc == 1, "");
-		  return rc;
+	std::bitset<16> bitSet = tab_rp_registers[0];
+	bitSet.reset(RUN_HYDROLIC);
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, bitSet.to_ulong());
+	printf("run Hydrolic bit is reset: \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 }
 
 int stopAll(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-	      //std::bitset<16> bitSet = tab_rp_registers[0];
-		  //bitSet.reset(OPEN_SHUTTER_LEFT);
-	      tab_rp_registers[0]=0x0000;
-		  int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, tab_rp_registers[0]);
-		  printf("run Stop All: \n");
-		  ASSERT_TRUE(rc == 1, "");
-		  return rc;
+
+	tab_rp_registers[0]=0x0000;
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, tab_rp_registers[0]);
+	printf("run Stop All: \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 }
 
 
@@ -246,18 +316,18 @@ int stopAll(uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADD
 
 int setRightDomePosition(uint16_t degree,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-	      int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, degree);
-		  printf("Write to Control register function ... \n");
-		  ASSERT_TRUE(rc == 1, "");
-	      return rc;
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, degree);
+	printf("Write to Control register function ... \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 }
 
 int setLeftDomePosition(uint16_t degree,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
 {
-		  int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, degree);
-		  printf("Write to Control register function ... \n");
-		  ASSERT_TRUE(rc == 1, "");
-	      return rc;
+	int rc = modbus_write_register(mb, UT_REGISTERS_ADDRESS, degree);
+	printf("Write to Control register function ... \n");
+	ASSERT_TRUE(rc == 1, "");
+	return rc;
 
 }
 int writeToControlRegister(int bitNumber,uint16_t * tab_rp_registers,modbus_t * mb, uint16_t UT_REGISTERS_ADDRESS)
@@ -283,35 +353,34 @@ uint16_t * readControlRegister(modbus_t * mb,uint16_t UT_REGISTERS_ADDRESS,uint1
 
 uint16_t * readStatusRegister(modbus_t * mb,uint16_t UT_REGISTERS_ADDRESS,uint16_t* tab_rp_registers)
 {
-	  	  	  	  int rc = modbus_read_registers(mb, UT_REGISTERS_ADDRESS,
-		                                      1, tab_rp_registers);
-		           //printf("2/2 modbus_read_registers: ");
-		           ASSERT_TRUE(rc == 1, "FAILED (read Status register %d)\n", rc);
-		          // std::cout<<"hex number is "<<std::hex<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<std::endl;
-		           std::cout<<"hex number is "<<std::hex<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<" binary value is "<<std::bitset<16>(tab_rp_registers[0])<<std::endl;
-		           return tab_rp_registers;
+	int rc = modbus_read_registers(mb, UT_REGISTERS_ADDRESS,1, tab_rp_registers);
+	//printf("2/2 modbus_read_registers: ");
+	ASSERT_TRUE(rc == 1, "FAILED (read Status register %d)\n", rc);
+	// std::cout<<"hex number is "<<std::hex<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<std::endl;
+	std::cout<<"hex number is "<<std::hex<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<" binary value is "<<std::bitset<16>(tab_rp_registers[0])<<std::endl;
+	return tab_rp_registers;
 }
 
 uint16_t *readAlarmRegister(modbus_t * mb,uint16_t UT_REGISTERS_ADDRESS,uint16_t* tab_rp_registers)
 {
-	 	 	 	 	   int rc = modbus_read_registers(mb, UT_REGISTERS_ADDRESS,
-			                                      1, tab_rp_registers);
-			           //printf("2/2 modbus_read_registers: ");
-			           ASSERT_TRUE(rc == 1, "FAILED (readAlarmRegister %d)\n", rc);
-			           std::cout<<"hex number is "<<std::hex<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<" binary value is "<<std::bitset<16>(tab_rp_registers[0])<<std::endl;
-			           return tab_rp_registers;
+	int rc = modbus_read_registers(mb, UT_REGISTERS_ADDRESS,1, tab_rp_registers);
+	//printf("2/2 modbus_read_registers: ");
+	ASSERT_TRUE(rc == 1, "FAILED (readAlarmRegister %d)\n", rc);
+	std::cout<<"hex number is "<<std::hex<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<" binary value is "<<std::bitset<16>(tab_rp_registers[0])<<std::endl;
+	return tab_rp_registers;
 }
 
 
 uint16_t * readRegister(modbus_t * mb,uint16_t UT_REGISTERS_ADDRESS,uint16_t* tab_rp_registers)
 {
-	  	  	  	  int rc = modbus_read_registers(mb, UT_REGISTERS_ADDRESS,
-		                                      1, tab_rp_registers);
-		           //printf("2/2 modbus_read_registers: ");
-		           ASSERT_TRUE(rc == 1, "FAILED (read Status register %d)\n", rc);
-		          // std::cout<<"hex number is "<<std::hex<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<std::endl;
-		           std::cout<<"hex number is "<<std::hex<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<" binary value is "<<std::bitset<16>(tab_rp_registers[0])<<std::endl;
-		           return tab_rp_registers;
+	int rc = modbus_read_registers(mb, UT_REGISTERS_ADDRESS,1, tab_rp_registers);
+	//printf("2/2 modbus_read_registers: ");
+	ASSERT_TRUE(rc == 1, "FAILED (read Status register %d)\n", rc);
+	// std::cout<<"hex number is "<<std::hex<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<std::endl;
+	std::cout<<"non hex number is "<<std::dec<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<" binary value is "<<std::bitset<16>(tab_rp_registers[0])<<std::endl;
+
+	std::cout<<"hex number is "<<std::hex<<tab_rp_registers[0]<<" The address is  "<<UT_REGISTERS_ADDRESS<<" binary value is "<<std::bitset<16>(tab_rp_registers[0])<<std::endl;
+	return tab_rp_registers;
 }
 
 
@@ -358,10 +427,10 @@ bool isThereAlarm(uint16_t * tab_rp_registers)
 
 
 
-
+modbus_t *mb=NULL;
 int main() {
 
-    modbus_t *mb=NULL;
+   // modbus_t *mb=NULL;
     int rc;
 
 
@@ -378,6 +447,7 @@ const uint16_t ALARM_WORD_REGISTER = ALARMWORD1;
 
 
  mb = modbus_new_tcp("192.168.2.10", 502);
+ //mb = modbus_new_tcp("127.0.0.1", 1502);
  if(mb==NULL)
  {
  fprintf(stderr,"unable to allocate libmodbus");
@@ -424,57 +494,6 @@ const uint16_t ALARM_WORD_REGISTER = ALARMWORD1;
 
 	   printf("\n");
 
-/*
-
-       check alarm test
-	   printf("READING ALARM register\n");
-       readAlarmRegister(mb,ALARMWORD1,anyRegister);
-       checkAlarms(anyRegister);
-       printf("---------------------------\n");
-       check alarm tests
-
-
-       get state test
-       printf("READING STATE register\n");
-       readStatusRegister(mb,STATUSWORD1,anyRegister);
-       checkStates(anyRegister);
-       printf("----------------------------\n");
-     get state test
-
-
-
-       get right slope
-       printf("READING RIGHT SLOPE register\n");
-       std::cout<<"right dome slope is "<<std::hex<<readRegister(mb,RIGHTDOMESLOPE,anyRegister)[0]<<std::endl;
-
-       printf("----------------------------\n");
-       get right slope
-
-
-       get left slope
-       printf("READING LEFT SLOPE register\n");
-       std::cout<<"left dome slope is "<<std::hex<<readRegister(mb,LEFTDOMESLOPE,anyRegister)[0]<<std::endl;
-
-       printf("--------------- ------------\n");
-       get left slope
-
-       get hydrolic temperature
-		printf("HYDROLIC TEMPERATURE register\n");
-		std::cout << "HYDROLIC TEMPERATURE " << std::hex
-				<< readRegister(mb, HYDROLICTEMPERATURE, anyRegister)[0] << std::endl;
-
-		printf("----------------------------\n");
-        get hydrolic temperature
-
-		get dome temperature
-		printf("DOME TEMPERATURE register\n");
-		std::cout << "DOME TEMPERATURE " << std::hex
-				<< readRegister(mb, DOMETEMPERATURE, anyRegister)[0] << std::endl;
-
-		printf("----------------------------\n");
-		get dome temperature
-*/
-
 
 
      //	   READ Control Word 40004/////
@@ -484,31 +503,59 @@ const uint16_t ALARM_WORD_REGISTER = ALARMWORD1;
 		printf("----------------------------\n");
 		// 		READ Control Word 40004////
 
-		/*get 40001 register INPUTREGISTER1*/
-		printf("40001(INPUT REGISTER1) register\n");
+		/*get 40000 register INPUTREGISTER1*/
+		printf("40000(INPUT REGISTER1) register\n");
 		readRegister(mb, INPUTREGISTER1, anyRegister);
 
 		printf("----------------------------\n");
-		/*get 40001 register INPUTREGISTER1*/
+		/*get 40000 register INPUTREGISTER1*/
 
 
 
 
-		 /*get 40002 register INPUTREGISTER2*/
-		printf("40002(INPUT REGISTER2) register\n");
+		 /*get 40001 register INPUTREGISTER2*/
+		printf("40001(INPUT REGISTER2) register\n");
 		readRegister(mb, INPUTREGISTER2, anyRegister);
 
 		printf("----------------------------\n");
-		/*get 40002 register INPUTREGISTER2*/
+		/*get 40001 register INPUTREGISTER2*/
 
 
+
+		 /*get 40002 register OUTPUTREGISTER1*/
+		printf("40002(OUTPUT REGISTER1) register\n");
+		readRegister(mb, OUTPUTREGISTER1, anyRegister);
+		/*****/
 
 		 /*get 40003 register OUTPUTREGISTER1*/
-		printf("40003(OUTPUT REGISTER1) register\n");
-		readRegister(mb, OUTPUTREGISTER1, anyRegister);
+				printf("40003(OUTPUT REGISTER1) register\n");
+				readRegister(mb, CONTROLWORD1, anyRegister);
+				/*get 40003*/
 
-		printf("----------------------------\n");
-		/*get 40003 register OUTPUTREGISTER1*/
+
+	    //get right slope
+	       printf("READING RIGHT SLOPE register\n");
+	     readRegister(mb,RIGHTDOMESLOPE,anyRegister);
+
+	       printf("----------------------------\n");
+	    //get right slope
+
+
+	     //get left slope
+	       printf("READING LEFT SLOPE register\n");
+	      readRegister(mb,LEFTDOMESLOPE,anyRegister);
+
+	       printf("--------------- ------------\n");
+
+
+
+	       //get status register
+	     	       printf("READING STATUSWORD1 register\n");
+	     	      readRegister(mb,STATUSWORD1,anyRegister);
+
+	     	       printf("--------------- ------------\n");
+
+
 
 
 
@@ -522,12 +569,13 @@ const uint16_t ALARM_WORD_REGISTER = ALARMWORD1;
 	 //  printf("4 for emergency stop\n");
 	 //  printf("5 to reset plc\n");
 	   printf("6 to run hydrolic  \n");
-	 //  printf("7 Arrange left shutter position\n");
-	 //  printf("8 Arrange right shutter position \n");
+	   printf("7 Arrange left shutter position\n");
+	   printf("8 Arrange right shutter position \n");
 	   printf("9 to stop hydrolic  \n");
 	   printf("4 to stop All  \n");
+	   printf("r to reset HeartBeat  \n");
+	   printf("t to reset Alarms  \n");
 
-	 //  printf("4 Start Grab loop (%d images)\n",ima_count);
 
 	   fflush(stdin);
 
@@ -542,14 +590,8 @@ const uint16_t ALARM_WORD_REGISTER = ALARMWORD1;
 			readControlRegister(mb,CONTROLWORD1,anyRegister);
 			int err = openLeftShutter(anyRegister,mb, CONTROLWORD1);
 			if(err ==-1){printf("error while opening left\n");break;}
-			else
-			{
-				while(isLeftShutterOpening(anyRegister))
-				{
-					printf("left shutter is opening\n");
-				    sleep(2);
-				}
-			}
+
+
 		}
 
 		if (c == '1') {
@@ -558,13 +600,9 @@ const uint16_t ALARM_WORD_REGISTER = ALARMWORD1;
 			if (err == -1) {
 				printf("error while opening right\n");
 				break;
-			} else {
-				while (isRightShutterOpening(anyRegister))
-					{
-					printf("right shutter is opening\n");
-					sleep(2);
-					}
 			}
+
+
 		}
 		if (c == '2') {
 			readControlRegister(mb, CONTROLWORD1, anyRegister);
@@ -572,13 +610,9 @@ const uint16_t ALARM_WORD_REGISTER = ALARMWORD1;
 			if (err == -1) {
 				printf("error while closing left\n");
 				break;
-			} else {
-				while (isLeftShutterClosing(anyRegister))
-				{
-					printf("left shutter is closing\n");
-			        sleep(2);
-				}
 			}
+
+
 		}
 		if (c == '3') {
 			readControlRegister(mb, CONTROLWORD1, anyRegister);
@@ -586,28 +620,11 @@ const uint16_t ALARM_WORD_REGISTER = ALARMWORD1;
 			if (err == -1) {
 				printf("error while closing left\n");
 				break;
-			} else {
-				while (isRightShutterClosing(anyRegister))
-				{
-					printf("left shutter is closing\n");
-				    sleep(2);
-				}
-			}
-		}
-/*
-		if (c == '4') {
-			readControlRegister(mb, CONTROLWORD1, anyRegister);
-			int err = emergencyStop(anyRegister, mb, CONTROLWORD1);
-			if (err == -1) {
-				printf("error while emergency stop\n");
-				break;
-			} else {
-
-				printf("Emergency stop is pressed\n");
 			}
 
+
 		}
-*/
+
 		if (c == '5') {
 			readControlRegister(mb, CONTROLWORD1, anyRegister);
 			int err = resetButton(anyRegister, mb, CONTROLWORD1);
@@ -636,83 +653,146 @@ const uint16_t ALARM_WORD_REGISTER = ALARMWORD1;
 		if (c == '7')
 			{
 			int position;
-			std::cout<<"enter the position"<<std::endl;
+			std::cout << "enter the position" << std::endl;
 			std::cin >> position;
-			int err = setLeftDomePosition(position, mb, LEFTDOMEPOSITIONCOMMAND);
-			if (err == -1)
-			{
+			int err = setLeftDomePosition(position, mb,LEFTDOMEPOSITIONCOMMAND);
+			if (err == -1) {
 				printf("Error while set left dome position \n");
 				break;
-			}
-			else
-			{
-				readStatusRegister(mb, STATUSWORD1, anyRegister);
-				while (isLeftShutterOpening(anyRegister) || isLeftShutterClosing)
-				{
-					printf("setting left shutter position\n");
-					 std::cout<<"left dome slope is "<<std::hex<<readRegister(mb,LEFTDOMESLOPE,anyRegister)[0]<<std::endl;
-					readStatusRegister(mb, STATUSWORD1, anyRegister);
-					sleep(2);
-				}
+			} else {
 
-			}
+					}
+
+			readControlRegister(mb,CONTROLWORD1,anyRegister);
+			err = goLeftShutter(anyRegister,mb, CONTROLWORD1);
+			if(err ==-1){printf("error while goto left\n");break;}
+
+
 
 				}
 		if (c == '8') {
 			int position;
-			std::cout<<"enter the position:"<<std::endl;
+			std::cout << "enter the position:" << std::endl;
 			std::cin >> position;
-			int err = setRightDomePosition(position, mb, RIGHTDOMEPOSITIONCOMMAND);
+			int err = setRightDomePosition(position, mb,RIGHTDOMEPOSITIONCOMMAND);
 			if (err == -1) {
 				printf("error while setting right shutter position\n");
 				break;
-			} else {
-				readStatusRegister(mb,STATUSWORD1, anyRegister);
-                while(isRightShutterOpening(anyRegister) || isRightShutterClosing )
-                {
-				printf("setting right shutter position\n");
-				 std::cout<<"right dome slope is "<<std::hex<<readRegister(mb,RIGHTDOMESLOPE,anyRegister)[0]<<std::endl;
-                readStatusRegister(mb, STATUSWORD1, anyRegister);
-                sleep(2);
-                }
 			}
+
+
+
+
+
+			readControlRegister(mb,CONTROLWORD1,anyRegister);
+			err = goRightShutter(anyRegister,mb, CONTROLWORD1);
+			if(err ==-1){printf("error while opening left\n");break;}
+
 
 				}
 
 		if (c == '9') {
-					readControlRegister(mb, CONTROLWORD1, anyRegister);
-					int err = stopHydrolic(anyRegister, mb, CONTROLWORD1);
-					if (err == -1) {
-						printf("error while stopping hydrolic \n");
-						break;
-					} else {
+			readControlRegister(mb, CONTROLWORD1, anyRegister);
+			int err = stopHydrolic(anyRegister, mb, CONTROLWORD1);
+			if (err == -1) {
+				printf("error while stopping hydrolic \n");
+				break;
+			} else {
 
-						printf("Hydrolic stopped\n");
-					}
+				printf("Hydrolic stopped\n");
+			}
 
 				}
 
-		if (c == '4') {
-					readControlRegister(mb, CONTROLWORD1, anyRegister);
-					int err = stopAll(anyRegister, mb, CONTROLWORD1);
-					if (err == -1) {
+		if (c == '4')
+		{
+			readControlRegister(mb, CONTROLWORD1, anyRegister);
+			int err = stopAll(anyRegister, mb, CONTROLWORD1);
+			if (err == -1) {
 				printf("error while stopping All \n");
 				break;
-			       }
-					else
+			} else
+
 			{
 
 				printf("All stopped\n");
 			}
-					}
+		}
+			if (c == 'r')
+			{
 
+
+
+				/*thread kullanmak icin*/
+
+				std::thread t([]()
+						{
+					while(TRUE)
+
+					{
+
+						uint16_t *anyRegister2 =  (uint16_t*) malloc(sizeof(uint16_t));
+						memset(anyRegister2, 0, sizeof(uint16_t));
+						std::cout<<"thread started"<<std::endl;
+						readControlRegister(mb, CONTROLWORD1, anyRegister2);
+						int err = setHearBeat2(anyRegister2, mb, CONTROLWORD1);
+						if (err == -1) {
+							printf("error while resetting heartbeat\n");
+
+
+							//break;
+						}
+						else
+						{
+							printf("Resetted heartbeat\n");
+						}
+
+						readControlRegister(mb, CONTROLWORD1, anyRegister2);
+						err = resetHearBeat2(anyRegister2, mb, CONTROLWORD1);
+
+						if (err == -1) {
+							printf("error while resetting heartbeat\n");
+
+
+							//break;
+						}
+						else
+						{
+							printf("Resetted heartbeat\n");
+						}
+
+						sleep(5);
+
+					}
+						}
+				);
+				std::cout<<"main thread"<<std::endl;
+				t.detach();
+				/*thread kullanmak icin*/
+
+		}
+
+			if (c == 't')
+			{
+				readControlRegister(mb, CONTROLWORD1, anyRegister);
+				int err = resetButton(anyRegister, mb, CONTROLWORD1);
+				if (err == -1) {
+					printf("reset alarm butonu \n");
+					break;
+				} else
+
+				{
+
+					printf("reset alarm butonu\n");
+				}
+			}
 
 
 	  }
 
 
             modbus_close(mb);
-	         modbus_free(mb);
+	        modbus_free(mb);
 
 	return 0;
 }
